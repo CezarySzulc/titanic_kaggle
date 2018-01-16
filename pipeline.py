@@ -32,8 +32,25 @@ class Model(object):
 
     def clear_data(self, data):
         # fill nan values in 'Age' and 'Fare' columns
-        data['Age'] = data['Age'].fillna(data['Age'].median())
-        data['Fare'] = data['Fare'].fillna(data['Fare'].median())
+        for _sex in data['Sex'].unique():
+            mask_sex = data['Sex'] == _sex
+            for _pclass in data['Pclass'].unique():
+                mask = np.logical_and(
+                    mask_sex,
+                    data['Pclass'] == _pclass
+                )
+                data.loc[mask, 'Age'] = data.loc[mask, 'Age'].fillna(
+                    data.loc[mask, 'Age'].dropna().median())
+                data.loc[mask, 'Fare'] = data.loc[mask, 'Fare'].fillna(
+                    data.loc[mask, 'Fare'].dropna().median())
+
+            data.loc[mask_sex, 'Age'] = data.loc[mask_sex, 'Age'].fillna(
+                data.loc[mask_sex, 'Age'].dropna().median()
+            )
+            data.loc[mask_sex, 'Fare'] = data.loc[mask_sex, 'Fare'].fillna(
+                data.loc[mask_sex, 'Fare'].dropna().median()
+            )
+
         data['Age'] = qcut(data.Age, q=6, labels=False)
         data['Fare'] = qcut(data.Fare, q=10, labels=False)
         # change 'Sex' columns into int type
@@ -64,6 +81,10 @@ class Model(object):
         sns.factorplot(x='Survived', col='Pclass', kind='count', data=self.train_data)
         plt.figure()
         sns.distplot(self.train_data['Age'])
+        plt.figure()
+        sns.distplot(self.train_data[self.train_data['Sex_male'] > 0]['Age'])
+        plt.figure()
+        sns.distplot(self.train_data[self.train_data['Sex_male'] == 0]['Age'])
         plt.show()
 
     def pipeline(self):
@@ -74,24 +95,22 @@ class Model(object):
         # linear regression
         # model = LogisticRegressionCV(cv=5)
         # Randorm forest tree clf
-        # model = RandomForestClassifier(
-        #     random_state=43,
-        #     n_jobs=-1,
-        #     max_depth=6,
-        #     n_estimators=40,
-        #
-        # )
-        # param_grid = {
-        #     # 'n_estimators': np.arange(5, 100, 5),
-        #     # 'max_depth': np.arange(1, 12),
-        #     'min_samples_split': np.arange(2, 8)
-        # }
-        # model = GridSearchCV(model, param_grid=param_grid, cv=5)
+        model = RandomForestClassifier(
+            random_state=43,
+            n_jobs=-1,
+            # n_estimators=10,
+            # min_samples_split=7
+        )
+        param_grid = {
+            'n_estimators': np.arange(5, 100, 5),
+            'max_depth': np.arange(1, 12),
+            'min_samples_split': np.arange(2, 10)
+        }
+        model = GridSearchCV(model, param_grid=param_grid, cv=5)
         model.fit(self.train_data[columns], self.train_label)
-        # print('Model best params: {}'.format(model.best_params_))
-        # print('Model best score: {}'.format(model.best_score_))
-        # print(model.best_estimator_)
-        # print(model.scores_)
+        print('Model best params: {}'.format(model.best_params_))
+        print('Model best score: {}'.format(model.best_score_))
+        print(model.best_estimator_)
         if self.need_valid_data:
             print(model.score(self.valid_data[columns], self.valid_label))
             print(classification_report(model.predict(self.valid_data[columns]), self.valid_label))
@@ -102,7 +121,6 @@ class Model(object):
 
 
 my_model = Model()
+# my_model.visualization()
 my_model.pipeline()
-my_model.save_test_output('xgboost')
-# pipeline = Pipeline()
-# pipeline = Pipeline()
+my_model.save_test_output('random_forest')
