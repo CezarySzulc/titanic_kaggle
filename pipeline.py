@@ -1,5 +1,5 @@
 from dowload_data import create_data_frame
-from pandas import get_dummies, qcut
+from pandas import get_dummies, qcut, to_numeric
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import GridSearchCV
@@ -7,10 +7,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
 import re
 import numpy as np
-# linear model
-from sklearn.linear_model import LogisticRegressionCV
-# xgb
-import xgboost as xgb
+# # linear model
+# from sklearn.linear_model import LogisticRegressionCV
+# # xgb
+# import xgboost as xgb
 
 
 class Model(object):
@@ -30,6 +30,13 @@ class Model(object):
         self.train_data = self.clear_data(self.train_data)
         self.test_data = self.clear_data(self.test_data)
 
+    def fillna_with_normal_distribution(self, df):
+        # mask of NaN's
+        mask = df.isnull()
+        mu, sigma = df.mean(), df.std()
+        df[mask] = np.random.normal(mu, sigma, size=mask.sum())
+        return df
+
     def clear_data(self, data):
         # fill nan values in 'Age' and 'Fare' columns
         for _sex in data['Sex'].unique():
@@ -39,25 +46,24 @@ class Model(object):
                     mask_sex,
                     data['Pclass'] == _pclass
                 )
-                data.loc[mask, 'Age'] = data.loc[mask, 'Age'].fillna(
-                    data.loc[mask, 'Age'].dropna().median())
-                data.loc[mask, 'Fare'] = data.loc[mask, 'Fare'].fillna(
-                    data.loc[mask, 'Fare'].dropna().median())
+                data.loc[mask, 'Age'] = self.fillna_with_normal_distribution(
+                    data.loc[mask, 'Age'])
+                data.loc[mask, 'Fare'] = self.fillna_with_normal_distribution(
+                    data.loc[mask, 'Fare'])
 
-            data.loc[mask_sex, 'Age'] = data.loc[mask_sex, 'Age'].fillna(
-                data.loc[mask_sex, 'Age'].dropna().median()
+            data.loc[mask_sex, 'Age'] = self.fillna_with_normal_distribution(
+                data.loc[mask_sex, 'Age']
             )
-            data.loc[mask_sex, 'Fare'] = data.loc[mask_sex, 'Fare'].fillna(
-                data.loc[mask_sex, 'Fare'].dropna().median()
+            data.loc[mask_sex, 'Fare'] = self.fillna_with_normal_distribution(
+                data.loc[mask_sex, 'Fare']
             )
-
-        data['Age'] = qcut(data.Age, q=6, labels=False)
-        data['Fare'] = qcut(data.Fare, q=10, labels=False)
+        data['Age'] = qcut(data.Age, q=5, labels=False)
+        data['Fare'] = qcut(data.Fare, q=5, labels=False)
         # change 'Sex' columns into int type
         data = get_dummies(data, columns=['Sex'], drop_first=True)
         data = get_dummies(data, columns=['Embarked'], drop_first=True)
         # categorical 'Name' column
-        data['Title'] = data['Name'].apply(lambda x: re.search(' ([A-Z][a-z]+)\.', x).group(1))
+        data['Title'] = data['Name'].apply(lambda x: re.search('([A-Z][a-z]+)\.', x).group(1))
         data['Title'] = data['Title'].replace({'Mlle': 'Miss', 'Mme': 'Mrs', 'Ms': 'Miss'})
         data['Title'] = data['Title'].replace([
             'Don', 'Dona', 'Rev', 'Dr', 'Major', 'Lady', 'Sir',
@@ -68,8 +74,13 @@ class Model(object):
         data = get_dummies(data, columns=['Title'], drop_first=True)
         # has cabin
         data['Has_Cabin'] = ~data['Cabin'].isnull()
+        data['Cabin_letter'] = data[data['Has_Cabin']]['Cabin'].apply(lambda x: re.search('([A-Z])+', x).group())
+        data = get_dummies(data, columns=['Cabin_letter'])
         # drop unused values
         data.drop(labels=['Name', 'Ticket', 'Cabin'], axis=1, inplace=True)
+
+        print(data.info())
+        print(data.describe())
         return data
 
     def visualization(self):
@@ -90,20 +101,16 @@ class Model(object):
     def pipeline(self):
         columns = self.test_data.columns.tolist()
         columns.remove('PassengerId')
-        # xgboost
-        model = xgb.XGBClassifier()
-        # linear regression
-        # model = LogisticRegressionCV(cv=5)
         # Randorm forest tree clf
         model = RandomForestClassifier(
             random_state=43,
             n_jobs=-1,
-            # n_estimators=10,
+            n_estimators=50,
             # min_samples_split=7
         )
         param_grid = {
-            'n_estimators': np.arange(5, 100, 5),
-            'max_depth': np.arange(1, 12),
+            # 'n_estimators': np.arange(5, 100, 5),
+            'max_depth': np.arange(5, 15),
             'min_samples_split': np.arange(2, 10)
         }
         model = GridSearchCV(model, param_grid=param_grid, cv=5)
