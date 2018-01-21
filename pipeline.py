@@ -60,8 +60,11 @@ class Model(object):
         data['Age'] = qcut(data.Age, q=5, labels=False)
         data['Fare'] = qcut(data.Fare, q=5, labels=False)
         # change 'Sex' columns into int type
-        data = get_dummies(data, columns=['Sex'], drop_first=True)
-        data = get_dummies(data, columns=['Embarked'], drop_first=True)
+        data['Sex'] = data['Sex'].map({'male': 1, 'female': 0})
+        # fillna for 'Embarked and map it into int type
+        freq_port = data['Embarked'].dropna().mode()[0]
+        data['Embarked'].fillna(freq_port, inplace=True)
+        data['Embarked'] = data['Embarked'].map({'S': 0, 'C': 1, 'Q': 2})
         # categorical 'Name' column
         data['Title'] = data['Name'].apply(lambda x: re.search('([A-Z][a-z]+)\.', x).group(1))
         data['Title'] = data['Title'].replace({'Mlle': 'Miss', 'Mme': 'Mrs', 'Ms': 'Miss'})
@@ -74,7 +77,9 @@ class Model(object):
         data = get_dummies(data, columns=['Title'], drop_first=True)
         # has cabin
         data['Has_Cabin'] = ~data['Cabin'].isnull()
-        data['Cabin_letter'] = data[data['Has_Cabin']]['Cabin'].apply(lambda x: re.search('([A-Z])+', x).group())
+        data['Cabin_letter'] = data[data['Has_Cabin']]['Cabin'].apply(
+            lambda x: re.search('([A-Z])+', x).group()
+        )
         data = get_dummies(data, columns=['Cabin_letter'])
         # drop unused values
         data.drop(labels=['Name', 'Ticket', 'Cabin'], axis=1, inplace=True)
@@ -85,17 +90,18 @@ class Model(object):
 
     def visualization(self):
         sns.set()
-        sns.countplot(x=self.train_label)
-        plt.figure()
-        sns.countplot(x='Sex_male', data=self.train_data)
-        sns.factorplot(x='Survived', col='Sex_male', kind='count', data=self.train_data)
-        sns.factorplot(x='Survived', col='Pclass', kind='count', data=self.train_data)
-        plt.figure()
-        sns.distplot(self.train_data['Age'])
-        plt.figure()
-        sns.distplot(self.train_data[self.train_data['Sex_male'] > 0]['Age'])
-        plt.figure()
-        sns.distplot(self.train_data[self.train_data['Sex_male'] == 0]['Age'])
+        # sns.countplot(x=self.train_label)
+        # plt.figure()
+        # sns.countplot(x='Sex', data=self.train_data)
+        # sns.factorplot(x='Survived', col='Sex', kind='count', data=self.train_data)
+        # sns.factorplot(x='Survived', col='Pclass', kind='count', data=self.train_data)
+        # plt.figure()
+        # sns.distplot(self.train_data['Age'])
+        # plt.figure()
+        # sns.distplot(self.train_data[self.train_data['Sex'] > 0]['Age'])
+        # plt.figure()
+        # sns.distplot(self.train_data[self.train_data['Sex'] == 0]['Age'])
+        
         plt.show()
 
     def pipeline(self):
@@ -106,12 +112,12 @@ class Model(object):
             random_state=43,
             n_jobs=-1,
             n_estimators=50,
-            # min_samples_split=7
+            min_samples_split=7
         )
         param_grid = {
             # 'n_estimators': np.arange(5, 100, 5),
             'max_depth': np.arange(5, 15),
-            'min_samples_split': np.arange(2, 10)
+            # 'min_samples_split': np.arange(2, 10)
         }
         model = GridSearchCV(model, param_grid=param_grid, cv=5)
         model.fit(self.train_data[columns], self.train_label)
